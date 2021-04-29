@@ -4,7 +4,7 @@ const pool = new Pool ({
   user: 'tylerbratt',
   password: '123',
   host: 'localhost',
-  database: 'bootcampx'
+  database: 'lightbnb'
 });
 
 const properties = require('./json/properties.json');
@@ -76,25 +76,23 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 10) {
-  
-  pool
+  return pool
     .query(
-      `SELECT properties.id, avg(property_reviews.rating) 
-      FROM property_reviews 
-      JOIN properties ON properties.id = property_id
+      `SELECT *, avg(property_reviews.rating) 
+      FROM properties 
+      JOIN property_reviews ON properties.id = property_id
       GROUP BY properties.id
       LIMIT $1;`,[limit])
     .then((res) => {
-      return res.rows;
+      console.log(res.rows);
     })
-    .catch((err)=> {console.log(err.message)});
+    .catch((err)=> console.log(err.message));
 
-
-  const limitedProperties = {};
-  for (let i = 1; i <= limit; i++) {
-    limitedProperties[i] = properties[i];
-  }
-  return Promise.resolve(limitedProperties);
+  // const limitedProperties = {};
+  // for (let i = 1; i <= limit; i++) {
+  //   limitedProperties[i] = properties[i];
+  // }
+  // return Promise.resolve(limitedProperties);
 }
 exports.getAllProperties = getAllProperties;
 

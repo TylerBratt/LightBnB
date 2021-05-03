@@ -18,19 +18,24 @@ const users = require('./json/users.json');
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithEmail = function(email) {
-console.log(email);
+  const userEmailQuery = `
+  SELECT *
+  FROM users
+  WHERE users.email = $1;
+  `
+  return db.query(userEmailQuery, [email])
+    .then(res => {
+      if(res.rows) {
+        return res.rows[0];
+      } else {
+        return null;
+      }
+    })
+    .catch (err => {
+      console.log('query error:', err)
+    });
+};
 
-  let user;
-  for (const userId in users) {
-    user = users[userId];
-    if (user.email.toLowerCase() === email.toLowerCase()) {
-      break;
-    } else {
-      user = null;
-    }
-  }
-  return Promise.resolve(user);
-}
 exports.getUserWithEmail = getUserWithEmail;
 
 /**
@@ -97,17 +102,54 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 5) {
-  return pool
-    .query(
-      `SELECT properties.*, avg(property_reviews.rating) 
+  const queryParams = []
+  let allPropertiesQuery = `
+      SELECT properties.*, avg(property_reviews.rating) 
       FROM properties 
       JOIN property_reviews ON properties.id = property_id
-      GROUP BY properties.id, property_reviews.id
-      LIMIT $1;`,[limit])
-    .then((res) => {
-      return(res.rows);
-    })
-    .catch((err)=> console.log(err.message));
+      `;
+    if (options.city) {
+      queryParams.push(`%${options.city}`);
+      allPropertiesQuery += `WHERE city LIKE $${queryParams.length}`;
+    }
+    if (options.owner_id) {
+      queryParams.push(options.owner_id);
+      if (queryParams.length === 1) {
+        allPropertiesQuery += `WHERE owner_id = $${queryParams.length} `;
+      } else {
+        allPropertiesQuery += `AND owner_id = $${queryParams.length} `;
+      }
+    }
+
+    if (options.minimum_price_per_night && options.maximum_price_per_night) {
+      queryParams.push(options.minimum_price_per_night * 100, options.maximum_price_per_night * 100);
+      if (queryParams.length === 2) {
+        allPropertiesQuery += `WHERE cost_per_night >= $${queryParams.length - 1} AND cost_per_night <= $${queryParams.length} `;
+      } else {
+        allPropertiesQuery += `AND cost_per_night >= $${queryParams.length - 1} AND cost_per_night <= $${queryParams.length} `;
+      }
+    }
+
+    allPropertiesQuery += `
+  GROUP BY properties.id
+  `;
+
+  if (options.minimum_rating) {
+    queryParams.push(options.minimum_rating);
+    allPropertiesQuery += `HAVING avg(property_reviews.rating) >= $${queryParams.length} `;
+  }
+
+  queryParams.push(limit);
+  allPropertiesQuery += `
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+
+  console.log(allPropertiesQuery, queryParams);
+
+
+  return pool.query(allPropertiesQuery, queryParams)
+  .then(res => res.rows);
 
   // const limitedProperties = {};
   // for (let i = 1; i <= limit; i++) {
@@ -124,9 +166,19 @@ exports.getAllProperties = getAllProperties;
  * @return {Promise<{}>} A promise to the property.
  */
 const addProperty = function(property) {
-  const propertyId = Object.keys(properties).length + 1;
-  property.id = propertyId;
-  properties[propertyId] = property;
-  return Promise.resolve(property);
-}
+  const propertyQuery = `
+  INSERT INTO properties (owner_id, title, description, thumbnail_photo_url, cover_photo_url, cost_per_night, parking_spaces, number_of_bathrooms, number_of_bedrooms, country, street, city, province, post_code)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+  RETURNING *;
+  `;
+  const values = [property.owner_id, property.title, property.description, property.thumbnail_photo_url, property.cover_photo_url, property.cost_per_night, property.parking_spaces, property.number_of_bathrooms, property.number_of_bedrooms, property.country, property.street, property.city, property.province, property.post_code];
+  
+  return db.query(propertyQuery, values)
+    .then(res => {
+      return res.rows[0];
+    })
+    .catch(err => {
+      return console.log('query error:', err);
+    })
+  }
 exports.addProperty = addProperty;

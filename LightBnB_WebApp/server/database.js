@@ -18,6 +18,8 @@ const users = require('./json/users.json');
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithEmail = function(email) {
+console.log(email);
+
   let user;
   for (const userId in users) {
     user = users[userId];
@@ -63,8 +65,27 @@ exports.addUser = addUser;
  * @return {Promise<[{}]>} A promise to the reservations.
  */
 const getAllReservations = function(guest_id, limit = 10) {
-  return getAllProperties(null, 2);
-}
+  const resoQuery = `
+  SELECT properties.*, reservations.*, avg(rating) as average_rating
+  FROM reservations
+  JOIN properties ON reservations.property_id = properties.id
+  JOIN property_reviews ON properties.id = property_reviews.property_id
+  WHERE reservations.guest_id = $1
+  AND reservations.end_date < now()::date
+  GROUP BY properties.id, reservations.id
+  ORDER BY reservations.start_date
+  LIMIT $2;
+  `;
+  console.log(resoQuery);
+  const values = [guest_id, limit]
+  return pool.query(resoQuery, values)
+  .then(res => {
+    return res.rows;
+  })
+  .catch (err => {
+    return console.log('error', err);
+  });
+};
 exports.getAllReservations = getAllReservations;
 
 /// Properties
@@ -75,24 +96,24 @@ exports.getAllReservations = getAllReservations;
  * @param {*} limit The number of results to return.
  * @return {Promise<[{}]>}  A promise to the properties.
  */
-const getAllProperties = function(options, limit = 10) {
-  // return pool
-  //   .query(
-  //     `SELECT properties.id, avg(property_reviews.rating) 
-  //     FROM properties 
-  //     JOIN property_reviews ON properties.id = property_id
-  //     GROUP BY properties.id, property_reviews.id
-  //     LIMIT $1;`,[limit])
-  //   .then((res) => {
-  //     return(res.rows);
-  //   })
-  //   .catch((err)=> console.log(err.message));
+const getAllProperties = function(options, limit = 5) {
+  return pool
+    .query(
+      `SELECT properties.*, avg(property_reviews.rating) 
+      FROM properties 
+      JOIN property_reviews ON properties.id = property_id
+      GROUP BY properties.id, property_reviews.id
+      LIMIT $1;`,[limit])
+    .then((res) => {
+      return(res.rows);
+    })
+    .catch((err)=> console.log(err.message));
 
-  const limitedProperties = {};
-  for (let i = 1; i <= limit; i++) {
-    limitedProperties[i] = properties[i];
-  }
-  return Promise.resolve(limitedProperties);
+  // const limitedProperties = {};
+  // for (let i = 1; i <= limit; i++) {
+  //   limitedProperties[i] = properties[i];
+  // }
+  // return Promise.resolve(limitedProperties);
 }
 exports.getAllProperties = getAllProperties;
 

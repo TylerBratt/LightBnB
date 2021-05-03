@@ -1,14 +1,7 @@
-const { Pool } = require('pg');
+const pool = require('./db');
 
-const pool = new Pool ({
-  user: 'tylerbratt',
-  password: '123',
-  host: 'localhost',
-  database: 'lightbnb'
-});
-
-const properties = require('./json/properties.json');
-const users = require('./json/users.json');
+// const properties = require('./json/properties.json');
+// const users = require('./json/users.json');
 
 /// Users
 
@@ -23,7 +16,7 @@ const getUserWithEmail = function(email) {
   FROM users
   WHERE users.email = $1;
   `
-  return db.query(userEmailQuery, [email])
+  return pool.query(userEmailQuery, [email])
     .then(res => {
       if(res.rows) {
         return res.rows[0];
@@ -44,7 +37,19 @@ exports.getUserWithEmail = getUserWithEmail;
  * @return {Promise<{}>} A promise to the user.
  */
 const getUserWithId = function(id) {
-  return Promise.resolve(users[id]);
+  const userIDQuery = `
+  SELECT * FROM users
+  WHERE users.id = $1
+  `;
+  return pool.query(userIDQuery, [id])
+    .then(res => {
+      if (res.rows) {
+        return res.rows[0];
+      } else {
+        return null;
+      }
+    })
+    .catch(err => console.log('query error:', err));
 }
 exports.getUserWithId = getUserWithId;
 
@@ -55,10 +60,19 @@ exports.getUserWithId = getUserWithId;
  * @return {Promise<{}>} A promise to the user.
  */
 const addUser =  function(user) {
-  const userId = Object.keys(users).length + 1;
-  user.id = userId;
-  users[userId] = user;
-  return Promise.resolve(user);
+  const addUserQuery = `
+  INSERT INTO users (name, email, password)
+  VALUES ($1, $2, $3)
+  RETURNING *;
+  `;
+  const values = [user.name, user.email, user.password];
+  return pool.query(addUserQuery, values)
+    .then(res => {
+      return res.rows[0];
+    })
+    .catch(err => {
+      return console.log('error:', err);
+    })
 }
 exports.addUser = addUser;
 
@@ -173,7 +187,7 @@ const addProperty = function(property) {
   `;
   const values = [property.owner_id, property.title, property.description, property.thumbnail_photo_url, property.cover_photo_url, property.cost_per_night, property.parking_spaces, property.number_of_bathrooms, property.number_of_bedrooms, property.country, property.street, property.city, property.province, property.post_code];
   
-  return db.query(propertyQuery, values)
+  return pool.query(propertyQuery, values)
     .then(res => {
       return res.rows[0];
     })
